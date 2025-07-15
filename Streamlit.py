@@ -36,7 +36,11 @@ indices = pd.Series(movies.index, index=movies['title'])
 
 
 def fetch_poster_and_details(movie_title):
-    api_key = "e348e6688ba71d35803de696d46642eb"
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    api_key=os.getenv("TMDB_API_KEY")
     try:
         search_url = f"https://api.themoviedb.org/3/search/movie?api_key={api_key}&query={movie_title}"
         response = requests.get(search_url, timeout=5)  # timeout for safety
