@@ -35,35 +35,64 @@ indices = pd.Series(movies.index, index=movies['title'])
 # Poster fetcher
 
 
-def fetch_poster_and_details(movie_title):
-    import os
-    from dotenv import load_dotenv
-    load_dotenv()
+import os
+from dotenv import load_dotenv
+import requests
+from time import sleep
 
-    api_key=os.getenv("TMDB_API_KEY")
+load_dotenv()
+API_KEY = os.getenv("API_KEY")
+
+def fetch_poster_details(movie_title):
+    if not API_KEY:
+        print("❌ API_KEY not found in environment variables.")
+        return None
+
     try:
-        search_url = f"https://api.themoviedb.org/3/search/movie?api_key={api_key}&query={movie_title}"
-        response = requests.get(search_url, timeout=5)  # timeout for safety
+        # Step 1: Get Movie ID
+        search_url = f"https://api.themoviedb.org/3/search/movie"
+        params = {"api_key": API_KEY, "query": movie_title}
+        response = requests.get(search_url, params=params, timeout=8)
+        response.raise_for_status()
+        data = response.json()
 
-        if response.status_code != 200:
-            return "https://via.placeholder.com/300x450.png?text=No+Poster"
+        if not data.get("results"):
+            print(f"❌ Movie '{movie_title}' not found.")
+            return None
 
-        results = response.json().get("results")
-        if not results:
-            return "https://via.placeholder.com/300x450.png?text=No+Poster"
+        movie_id = data["results"][0].get("id")
+        if not movie_id:
+            print(f"❌ No movie ID found for '{movie_title}'")
+            return None
 
-        poster_path = results[0].get("poster_path")
+        # Step 2: Get Poster from Movie ID
+        details_url = f"https://api.themoviedb.org/3/movie/{movie_id}"
+        params = {"api_key": API_KEY, "language": "en-US"}
+        response = requests.get(details_url, params=params, timeout=8)
+        response.raise_for_status()
+        details = response.json()
+
+        poster_path = details.get("poster_path")
         if not poster_path:
-            return "https://via.placeholder.com/300x450.png?text=No+Poster"
+            print(f"❌ No poster found for '{movie_title}' (ID: {movie_id})")
+            return None
 
-        # Poster URL from TMDB image CDN
-        full_poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
-        return full_poster_url
+        poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
+        print(f"✅ {movie_title} → {poster_url}")
+        return poster_url
 
+    except requests.exceptions.Timeout:
+        print(f"❌ Timeout error for '{movie_title}'")
+    except requests.exceptions.HTTPError as err:
+        print(f"❌ HTTP error for '{movie_title}': {err}")
+    except requests.exceptions.ConnectionError as err:
+        print(f"❌ Connection error for '{movie_title}': {err}")
     except Exception as e:
-        print("⚠️ Error fetching poster:", e)
-        return "https://via.placeholder.com/300x450.png?text=No+Poster"
-    
+        print(f"❌ Unexpected error for '{movie_title}': {e}")
+
+    return None
+
+
 
 # Recommend function
 def recommend(movie_title, top_n=5):
@@ -81,10 +110,10 @@ def recommend(movie_title, top_n=5):
     recommended_titles = movies['title'].iloc[movie_indices].tolist()
     overviews = movies['overview'].iloc[movie_indices].tolist()
     ratings = movies['vote_average'].iloc[movie_indices].tolist()
-    posters = [fetch_poster_and_details(title) for title in recommended_titles]
+    posters = [fetch_poster_details(title) for title in recommended_titles]
 
 
-    return recommended_titles, posters, overviews, ratings
+    return recommended_titles, posters, ratings, overviews
 
 # 🎬 Streamlit Frontend
 st.title("🎥 Movie Recommender")
